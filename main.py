@@ -132,7 +132,7 @@ class Application(tk.Frame):
     #   1   | URL
     #   2   | Checkbox_Buttom
     #   3   | Checkbox_Value
-    #   4   | State # Not Implemented Yet
+    #   4   | State
     def write_data_links(self):
         self.data = [[self.flatstr(a.string), urljoin(self.course, a['href']), tk.Checkbutton(), tk.IntVar(), tk.StringVar()] for a in self.soup.find_all('a', href=re.compile('(?i)\\.[^./]+$')) if a.string]
         for data in self.data:
