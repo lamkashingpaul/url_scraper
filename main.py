@@ -2,6 +2,7 @@ from tkinter import ttk
 from bs4 import BeautifulSoup
 from threading import Thread
 from urllib.parse import urljoin
+from datetime import datetime
 # import concurrent.futures
 
 import tkinter as tk
@@ -131,9 +132,9 @@ class Application(tk.Frame):
     #   1   | URL
     #   2   | Checkbox_Buttom
     #   3   | Checkbox_Value
-    #   4   | Display_Option # Not Implemented Yet
+    #   4   | State # Not Implemented Yet
     def write_data_links(self):
-        self.data = [[self.flatstr(a.string), urljoin(self.course, a['href']), tk.Checkbutton(), tk.IntVar(), 1] for a in self.soup.find_all('a', href=re.compile('(?i)\\.[^./]+$')) if a.string]
+        self.data = [[self.flatstr(a.string), urljoin(self.course, a['href']), tk.Checkbutton(), tk.IntVar(), tk.StringVar()] for a in self.soup.find_all('a', href=re.compile('(?i)\\.[^./]+$')) if a.string]
         for data in self.data:
             data[0] = tk.StringVar(value=data[0])
             data[2] = tk.Checkbutton(self.scroll_frame_inside, variable=data[3])
@@ -147,22 +148,25 @@ class Application(tk.Frame):
             self.list_frame_links = tk.Label(self.scroll_frame_inside, text='URL')
             self.list_frame_filenames = tk.Label(self.scroll_frame_inside, text='Filename')
             self.list_frame_checkboxs = tk.Label(self.scroll_frame_inside, text='Checkbox')
+            self.list_frame_states = tk.Label(self.scroll_frame_inside, text='State')
 
             self.list_frame_texts.grid(row=1, column=1)
             self.list_frame_links.grid(row=1, column=2)
             self.list_frame_filenames.grid(row=1, column=3)
             self.list_frame_checkboxs.grid(row=1, column=4)
+            self.list_frame_states.grid(row=1, column=5)
 
             for i in range(len(self.data)):
                 self.list_frame_texts = tk.Label(self.scroll_frame_inside, textvariable=self.data[i][0])
                 self.list_frame_links = tk.Label(self.scroll_frame_inside, text=self.data[i][1])
                 self.list_frame_filenames = tk.Entry(self.scroll_frame_inside, textvariable=self.data[i][0])
+                self.list_frame_states = tk.Label(self.scroll_frame_inside, textvariable=self.data[i][4])
 
                 self.list_frame_texts.grid(row=i + 2, column=1)
                 self.list_frame_links.grid(row=i + 2, column=2)
                 self.list_frame_filenames.grid(row=i + 2, column=3)
-
                 self.data[i][2].grid(row=i + 2, column=4)
+                self.list_frame_states.grid(row=i + 2, column=5)
                 pass
 
             self.scroll_frame_inside.grid_columnconfigure((0, 5), weight=1)
@@ -191,20 +195,63 @@ class Application(tk.Frame):
                 checkbutton[3].set(1)
 
     def download_selected(self):
-        s = requests.session()
+        self.action_button_download_selected['state'] = 'disable'
+        self.action_button_download_selected['text'] = 'Download In Progress'
+
+        # Initialize State and Parameters
         for data in self.data:
+            data[4].set('')
+        total_number_of_downloads = sum([(i[3].get()) for i in self.data])
+
+        s = requests.session()
+        for i, data in enumerate(self.data):
             if data[3].get() == 1:
                 try:
-                    r = s.get(data[1], auth=(username, password))
-                    content_type = r.headers['content-type']
-                    extension = mimetypes.guess_extension(content_type)
+                    # Print Message to user
+                    data[4].set(f'{i}/{total_number_of_downloads} Completed. Downloading...')
+
+                    # Create Folder for Domain
                     target_dir = os.path.join(current_dir, self.flatstr(self.course))
                     os.makedirs(target_dir, exist_ok=True)
+
+                    # Define the filename and file path
+                    r = s.get(data[1], auth=(username, password))
+                    content_type = r.headers['content-type']
+                    remote_size = int(r.headers['content-length'])
+                    extension = mimetypes.guess_extension(content_type)
                     filename = data[1].split('/')[-1].split('.')[-2] + ' - ' + data[0].get() + extension
-                    with open(os.path.join(target_dir, filename), 'wb') as f:
+                    filepath = os.path.join(target_dir, filename)
+
+                    # Check if file already exists
+                    if os.path.isfile(filepath):
+                        # Compare local and remote file length
+                        local_size = os.path.getsize(filepath)
+                        if local_size == remote_size:
+                            print(f"File already exists: {filename}")
+                            data[4].set(f'{i + 1}/{total_number_of_downloads} Completed. File Already UpToDate')
+                            continue
+                        else:
+                            # Rename the local file
+                            print(f"Remote file is updated: {filename} ")
+
+                            newfilename = os.path.splitext(filename)[0] + ' - ' + datetime.today().strftime('%Y%m%d-%H%M%S') + extension + '.BAK'
+                            newfilepath = os.path.join(target_dir, newfilename)
+                            os.rename(filepath, newfilepath)
+
+                            print(f"Local file is backed up as: {newfilename}")
+
+                    # Write to disk
+                    with open(filepath, 'wb') as f:
                         f.write(r.content)
-                except Exception:
+                        data[4].set(f'{i + 1}/{total_number_of_downloads} Completed. Downloaded Successfully.')
+
+                except Exception as e:
+                    print('Failed to do something: ' + str(e))
+                    data[4].set(f'{i + 1}/{total_number_of_downloads} Completed. Failed to do something: + {str(e)}')
                     pass
+
+        self.action_button_download_selected['state'] = 'normal'
+        self.action_button_download_selected['text'] = 'Download Selected'
 
     def download_selected_threaded(self):
         thread = Thread(target=self.download_selected, daemon=True)
