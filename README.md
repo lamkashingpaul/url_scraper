@@ -1,2 +1,2 @@
-# cuhk_math_scraper
-Scraper for CUHK Mathematics Department Course Website
+# url_scraper
+General Scraper for URLs
