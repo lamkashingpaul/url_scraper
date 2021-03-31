@@ -2,6 +2,7 @@ from tkinter import ttk
 from bs4 import BeautifulSoup
 from threading import Thread
 from urllib.parse import urljoin
+from urllib.parse import unquote
 from datetime import datetime
 # import concurrent.futures
 
@@ -16,7 +17,7 @@ import mimetypes
 WIDTH = 600
 HEIGHT = 480
 URL_PATH = ''
-DEFAULT_COURSE = 'https://staff.ie.cuhk.edu.hk/~khzhang/ierg4130/'
+DEFAULT_COURSE = 'https://course.ie.cuhk.edu.hk/~ierg4998/21-22/SupervisorList.htm'
 
 username = 'math2010'  # Not Implemented Yet
 password = 'calculus'  # Not Implemented Yet
@@ -59,7 +60,7 @@ class Application(tk.Frame):
         self.list_frame.pack(padx=5, pady=5, side='top', fill='both', expand=True)
 
         # Data list
-        self.course = ""
+        self.course = ''
         self.data = []
 
         # Bottom Action Frame
@@ -104,7 +105,11 @@ class Application(tk.Frame):
         self.r = self.s.get(course)
         self.soup = BeautifulSoup(self.r.text, 'html.parser')
 
-        self.master.title('[' + self.soup.title.string + ']')
+        if self.soup.title:
+            self.master.title('[' + self.soup.title.string + ']')
+        else:
+            self.master.title('[' + course + ']')
+
         self.course = course
 
         # Reset the list frame
@@ -134,7 +139,7 @@ class Application(tk.Frame):
     #   3   | Checkbox_Value
     #   4   | State
     def write_data_links(self):
-        self.data = [[self.flatstr(a.string), urljoin(self.course, a['href']), tk.Checkbutton(), tk.IntVar(), tk.StringVar()] for a in self.soup.find_all('a', href=re.compile('(?i)\\.[^./]+$')) if a.string]
+        self.data = [[self.flatstr(a.text), urljoin(self.course, a['href']), tk.Checkbutton(), tk.IntVar(), tk.StringVar()] for a in self.soup.find_all('a', href=re.compile('(?i)\\.[^./]+$')) if a.text]
         for data in self.data:
             data[0] = tk.StringVar(value=data[0])
             data[2] = tk.Checkbutton(self.scroll_frame_inside, variable=data[3])
@@ -177,7 +182,7 @@ class Application(tk.Frame):
     def flatstr(self, value):
         for c in '\\/:*?"<>|':
             value = value.replace(c, '-')
-        return value
+        return value.lstrip()
 
     def deselect_all(self):
         for checkbutton in self.data:
@@ -204,7 +209,10 @@ class Application(tk.Frame):
         total_number_of_downloads = sum([(i[3].get()) for i in self.data])
 
         s = requests.session()
-        for i, data in enumerate(self.data):
+
+        i = 0
+        for data in self.data:
+            self.list_frame.pack(padx=5, pady=5, side='top', fill='both', expand=True)
             if data[3].get() == 1:
                 try:
                     # Print Message to user
@@ -219,7 +227,13 @@ class Application(tk.Frame):
                     content_type = r.headers['content-type']
                     remote_size = int(r.headers['content-length'])
                     extension = mimetypes.guess_extension(content_type)
-                    filename = data[1].split('/')[-1].split('.')[-2] + ' - ' + data[0].get() + extension
+
+                    if extension is None:
+                        extension = '.' + data[1].split('/')[-1].split('.')[-1]
+                        if extension is None:
+                            extension = ''
+
+                    filename = unquote(data[1].split('/')[-1].split('.')[-2]) + ' - ' + data[0].get() + extension
                     filepath = os.path.join(target_dir, filename)
 
                     # Check if file already exists
@@ -227,18 +241,19 @@ class Application(tk.Frame):
                         # Compare local and remote file length
                         local_size = os.path.getsize(filepath)
                         if local_size == remote_size:
-                            print(f"File already exists: {filename}")
+                            print(f'File already exists: {filename}')
                             data[4].set(f'{i + 1}/{total_number_of_downloads} Completed. File Already UpToDate')
+                            i += 1
                             continue
                         else:
                             # Rename the local file
-                            print(f"Remote file is updated: {filename} ")
+                            print(f'Remote file is different from local: {filename}')
 
                             newfilename = os.path.splitext(filename)[0] + ' - ' + datetime.today().strftime('%Y%m%d-%H%M%S') + extension + '.BAK'
                             newfilepath = os.path.join(target_dir, newfilename)
                             os.rename(filepath, newfilepath)
 
-                            print(f"Local file is backed up as: {newfilename}")
+                            print(f'Local file is backed up as: {newfilename}')
 
                     # Write to disk
                     with open(filepath, 'wb') as f:
@@ -248,7 +263,8 @@ class Application(tk.Frame):
                 except Exception as e:
                     print('Failed to do something: ' + str(e))
                     data[4].set(f'{i + 1}/{total_number_of_downloads} Completed. Failed to do something: + {str(e)}')
-                    pass
+
+                i += 1
 
         self.action_button_download_selected['state'] = 'normal'
         self.action_button_download_selected['text'] = 'Download Selected'
@@ -324,8 +340,8 @@ class DoubleScrollbarFrame(ttk.Frame):
         self.canvas.create_window(0, 0, window=self.insdie_frame, anchor='nw')
         root.update_idletasks()
         self.canvas.config(scrollregion=self.canvas.bbox('all'))
-        self.canvas.xview_moveto(0)
-        self.canvas.yview_moveto(0)
+        # self.canvas.xview_moveto(0)
+        # self.canvas.yview_moveto(0)
         ttk.Frame.pack(self, **kwargs)
 
     def bound_to_mousewheel(self, event):
@@ -339,7 +355,7 @@ class DoubleScrollbarFrame(ttk.Frame):
 
     def get_frame(self):
         '''
-            Return the "frame" useful to place inner controls.
+            Return the frame useful to place inner controls.
         '''
         return self.insdie_frame
 
