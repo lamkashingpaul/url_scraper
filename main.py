@@ -233,7 +233,12 @@ class Application(tk.Frame):
                         if extension is None:
                             extension = ''
 
-                    filename = unquote(data[1].split('/')[-1].split('.')[-2]) + ' - ' + data[0].get() + extension
+                    filename = unquote(data[1].split('/')[-1].split('.')[-2])
+
+                    if data[0].get():
+                        filename += ' - ' + data[0].get().rsplit()[0]
+
+                    filename += extension
                     filepath = os.path.join(target_dir, filename)
 
                     # Check if file already exists
